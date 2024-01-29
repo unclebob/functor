@@ -1,22 +1,6 @@
 (ns functor.core
   (:require [clojure.set :as set]))
 
-;(def mean (functor ([ns]
-;  (make-sum)
-;  (/ sum (count ns)))
-; (make-sum []
-;  (<- sum (reduce + ns)))
-;  )
-
-;(def mean
-;  (fn [ns]
-;    (let [make-sum (fn [this]
-;                     (assoc this :sum (reduce + ns)))
-;          this {}
-;          {:keys [sum] :as this} (make-sum this)]
-;      (/ sum (count ns)))))
-
-
 (defn expand-method-body [method-data method-body]
   (if (empty? method-body)
     ['this #{}]
@@ -31,7 +15,7 @@
           [final-let vars])
 
         (not (seq? (first forms)))
-        (throw (Exception. (prn-str "not a seq:" (first forms))))
+        (throw (Exception. (prn-str "not a <- setter:" (first forms))))
 
         (= '<- (ffirst forms))
         (let [form (first forms)
@@ -42,8 +26,7 @@
                  (conj vars var)))
 
         :else
-        (throw (Exception. (prn-str "horrible: " (first forms))))
-        ))))
+        (throw (Exception. (prn-str "only <- setters allowed: " (first forms))))))))
 
 (defn- expand-method [method-desc method-data]
   (let [name (first method-desc)
@@ -58,14 +41,13 @@
 (defn- make-lets [method-expansions]
   (vec (concat [] method-expansions ['this {}])))
 
-(defn expand-functor-body [{:keys [method-names] :as method-data} body-forms]
+(defn expand-functor-body [{:keys [method-names]} body-forms]
   (loop [forms body-forms
          method-calls []
          body-calls []]
     (cond
       (empty? forms)
       [method-calls body-calls]
-
 
       (not (seq? (first forms)))
       (recur (rest forms)
@@ -83,8 +65,7 @@
       :else
       (recur (rest forms)
              method-calls
-             (conj body-calls (first forms)))
-      )))
+             (conj body-calls (first forms))))))
 
 (defn- var-destructure [method-data]
   (if (empty? (:vars method-data))
@@ -101,8 +82,7 @@
         `(fn ~arg-list (let
                          ~lets
                          ~@functor-body)))
-      `(fn ~arg-list ~@body))
-    ))
+      `(fn ~arg-list ~@body))))
 
 (defmacro functor [functor-desc & methods-desc]
   (loop [methods methods-desc
@@ -110,5 +90,4 @@
     (if (empty? methods)
       (generate-functor method-data functor-desc methods-desc)
       (recur (rest methods)
-             (expand-method (first methods) method-data))
-      )))
+             (expand-method (first methods) method-data)))))
