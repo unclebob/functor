@@ -84,13 +84,18 @@
              (concat body-calls (first body-forms)))
       )))
 
+(defn- var-destructure [method-data]
+  (if (empty? (:vars method-data))
+    []
+    [`{:keys [~@(:vars method-data)]} 'this]))
+
 (defn- generate-functor [method-data functor-desc methods-desc]
   (let [arg-list (first functor-desc)
         body (rest functor-desc)]
     (if (some? methods-desc)
       (let [lets (make-lets (:methods method-data))
             [method-calls functor-body] (expand-functor-body method-data body)
-            lets (vec (concat lets method-calls))]
+            lets (vec (concat lets method-calls (var-destructure method-data)))]
         `(fn ~arg-list (let
                          ~lets
                          ~@functor-body)))

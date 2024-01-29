@@ -47,7 +47,8 @@
                   [this (clojure.core/assoc this :v y)]
                   this))
             this {}
-            this (g this 1)]
+            this (g this 1)
+            {:keys [v]} this]
            v))
       (macroexpand-1 '(functor ([x] (g 1) v)
                                (g [y] (<- v y))))))
@@ -74,11 +75,11 @@
   )
 
 (def degenerate (functor ([] 1)))
-(def one-method (functor ([] (g 2) this) (g [x] (<- v x))))
+(def one-method (functor ([] (g 2) v) (g [x] (<- v x))))
 
-(prn 'one-method (macroexpand-1 '(functor ([] (g 2) this) (g [x] (<- v x)))))
+(prn 'one-method (macroexpand-1 '(functor ([] (g 2) v) (g [x] (<- v x)))))
 
 (describe "functor execution"
   (it "executes functors"
     (should= 1 (degenerate))
-    (should= {:v 2} (one-method))))
+    (should= 2 (one-method))))
