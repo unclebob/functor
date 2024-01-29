@@ -1,18 +1,15 @@
 (ns functor.core
   (:require [clojure.set :as set]))
 
-(defn expand-method-body [method-data method-body]
+(defn expand-method-body [method-body]
   (if (empty? method-body)
-    ['this #{}]
+    [nil #{}]
     (loop [forms method-body
-           expanded-forms (if (empty? (:vars method-data))
-                            []
-                            [`{:keys [~@ (:vars method-data)]} 'this])
+           expanded-forms []
            vars #{}]
       (cond
         (empty? forms)
-        (let [final-let `(let [~@expanded-forms] ~'this)]
-          [final-let vars])
+        [expanded-forms vars]
 
         (not (seq? (first forms)))
         (throw (Exception. (prn-str "not a <- setter:" (first forms))))
@@ -22,7 +19,7 @@
               var (second form)
               body (drop 2 form)]
           (recur (rest forms)
-                 (concat expanded-forms [`{:keys [~@(:vars method-data) ~var] :as ~'this} `(assoc ~'this ~(keyword var) ~@body)])
+                 (concat expanded-forms [`(reset! ~var ~@body)])
                  (conj vars var)))
 
         :else
@@ -30,58 +27,30 @@
 
 (defn- expand-method [method-desc method-data]
   (let [name (first method-desc)
-        args (vec (concat ['this] (second method-desc)))
+        args (vec (second method-desc))
         body (drop 2 method-desc)
-        [body vars] (expand-method-body method-data body)
-        method-data (update method-data :methods concat [name `(fn ~args ~body)])
+        [body vars] (expand-method-body body)
+        fn-decl (if (empty? body) `(fn ~args) `(fn ~args ~@body))
+        method-data (update method-data :methods concat [name fn-decl])
         method-data (update method-data :method-names conj name)
         method-data (update method-data :vars set/union vars)]
     method-data))
 
-(defn- make-lets [method-expansions]
-  (vec (concat [] method-expansions ['this {}])))
+(defn make-atoms [vars]
+  (reduce #(concat %1 [%2 '(atom nil)]) [] vars))
 
-(defn expand-functor-body [{:keys [method-names]} body-forms]
-  (loop [forms body-forms
-         method-calls []
-         body-calls []]
-    (cond
-      (empty? forms)
-      [method-calls body-calls]
-
-      (not (seq? (first forms)))
-      (recur (rest forms)
-             method-calls
-             (conj body-calls (first forms)))
-
-      (method-names (ffirst forms))
-      (let [form (first forms)
-            name (first form)
-            args (rest form)]
-        (recur (rest forms)
-               (concat method-calls ['this `(~name ~'this ~@args)])
-               body-calls))
-
-      :else
-      (recur (rest forms)
-             method-calls
-             (conj body-calls (first forms))))))
-
-(defn- var-destructure [method-data]
-  (if (empty? (:vars method-data))
-    []
-    [`{:keys [~@(:vars method-data)]} 'this]))
+(defn- make-lets [{:keys [methods vars]}]
+  (let [atoms (make-atoms vars)]
+    (vec (concat atoms methods))))
 
 (defn- generate-functor [method-data functor-desc methods-desc]
   (let [arg-list (first functor-desc)
         body (rest functor-desc)]
     (if (some? methods-desc)
-      (let [lets (make-lets (:methods method-data))
-            [method-calls functor-body] (expand-functor-body method-data body)
-            lets (vec (concat lets method-calls (var-destructure method-data)))]
+      (let [lets (make-lets method-data)]
         `(fn ~arg-list (let
                          ~lets
-                         ~@functor-body)))
+                         ~@body)))
       `(fn ~arg-list ~@body))))
 
 (defmacro functor [functor-desc & methods-desc]
