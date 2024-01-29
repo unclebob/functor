@@ -2,11 +2,6 @@
   (:require [functor.core :refer :all]
             [speclj.core :refer :all]))
 
-;(describe "functor"
-;  (it "calculates mean"
-;    (should= 6 (mean [3 6 9])))
-;  )
-
 (describe "functor-macro"
   (it "generates empty functor"
     (should=
