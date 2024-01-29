@@ -8,20 +8,22 @@
 ;  (<- sum (reduce + ns)))
 ;  )
 
-(def mean
-  (fn [ns]
-    (let [make-sum (fn [this]
-                     (assoc this :sum (reduce + ns)))
-          this {}
-          {:keys [sum] :as this} (make-sum this)]
-      (/ sum (count ns)))))
+;(def mean
+;  (fn [ns]
+;    (let [make-sum (fn [this]
+;                     (assoc this :sum (reduce + ns)))
+;          this {}
+;          {:keys [sum] :as this} (make-sum this)]
+;      (/ sum (count ns)))))
 
 
 (defn expand-method-body [method-data method-body]
   (if (empty? method-body)
     ['this #{}]
     (loop [forms method-body
-           expanded-forms []
+           expanded-forms (if (empty? (:vars method-data))
+                            []
+                            [`{:keys [~@ (:vars method-data)]} 'this])
            vars #{}]
       (cond
         (empty? forms)
@@ -36,7 +38,7 @@
               var (second form)
               body (drop 2 form)]
           (recur (rest forms)
-                 (concat expanded-forms ['this `(assoc ~'this ~(keyword var) ~@body)])
+                 (concat expanded-forms [`{:keys [~@(:vars method-data) ~var] :as ~'this} `(assoc ~'this ~(keyword var) ~@body)])
                  (conj vars var)))
 
         :else
@@ -81,7 +83,7 @@
       :else
       (recur (rest forms)
              method-calls
-             (concat body-calls (first body-forms)))
+             (conj body-calls (first forms)))
       )))
 
 (defn- var-destructure [method-data]
