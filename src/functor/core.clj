@@ -1,9 +1,9 @@
 (ns functor.core
   (:require [clojure.set :as set]))
 
-(declare expand-method-body)
+(declare expand-forms)
 
-(defn expand-method-form [method-form]
+(defn expand-form [method-form]
   (if-not (coll? method-form)
     [method-form #{}]
     (cond
@@ -11,23 +11,23 @@
       [[] #{}]
 
       (vector? method-form)
-      (let [[items vars] (expand-method-body method-form)]
+      (let [[items vars] (expand-forms method-form)]
         [(vec items) vars])
 
       (= '<- (first method-form))
       (let [var (second method-form)
             expression (nth method-form 2)
-            [expanded-body expanded-vars] (expand-method-form expression)]
+            [expanded-body expanded-vars] (expand-form expression)]
         [`(reset! ~var ~expanded-body) (conj expanded-vars var)])
 
       :else
       (let [f-name (first method-form)
             args (rest method-form)
-            [forms vars] (expand-method-body args)]
+            [forms vars] (expand-forms args)]
         [(concat [f-name] forms) vars]))))
 
-(defn expand-method-body [method-body]
-  (let [expansions (doall (map expand-method-form method-body))
+(defn expand-forms [method-body]
+  (let [expansions (doall (map expand-form method-body))
         expanded-forms (map first expansions)
         vars (reduce #(set/union %1 (second %2)) #{} expansions)]
     [(apply vector expanded-forms) vars]))
@@ -36,12 +36,39 @@
   (let [name (first method-desc)
         args (vec (second method-desc))
         body (drop 2 method-desc)
-        [body vars] (expand-method-body body)
+        [body vars] (expand-forms body)
         fn-decl (if (empty? body) `(fn ~args) `(fn ~args ~@body))
         method-data (update method-data :methods concat [name fn-decl])
         method-data (update method-data :method-names conj name)
         method-data (update method-data :vars set/union vars)]
     method-data))
+
+(defn dereference-vars [forms vars]
+  (loop [forms forms
+         dereferenced-forms []]
+    (cond
+      (empty? forms)
+      dereferenced-forms
+
+      (not (coll? (first forms)))
+      (let [form (first forms)]
+        (if (vars form)
+          (recur (rest forms) (concat dereferenced-forms [`@~form]))
+          (recur (rest forms) (concat dereferenced-forms [form]))))
+
+      (vector? (first forms))
+      (recur (rest forms)
+             (concat dereferenced-forms [(vec (dereference-vars (first forms) vars))]))
+
+      (= 'clojure.core/reset! (ffirst forms))
+      (let [[_ name expression] (first forms)]
+        (recur (rest forms)
+               (conj dereferenced-forms ['clojure.core/reset! name (first (dereference-vars [expression] vars))])))
+
+      :else
+      (recur (rest forms) (concat dereferenced-forms [(dereference-vars (first forms) vars)])))
+    )
+  )
 
 (defn make-atoms [vars]
   (reduce #(concat %1 [%2 '(atom nil)]) [] vars))
@@ -52,12 +79,14 @@
 
 (defn- generate-functor [method-data functor-desc methods-desc]
   (let [arg-list (first functor-desc)
-        [body vars] (expand-method-body (rest functor-desc))
-        method-data (update method-data :vars set/union vars)]
+        [body vars] (expand-forms (rest functor-desc))
+        method-data (update method-data :vars set/union vars)
+        vars (:vars method-data)
+        body (dereference-vars body vars)]
     (if (or (some? methods-desc) (not (empty? (:vars method-data))))
       (let [lets (make-lets method-data)]
         `(fn ~arg-list (let
-                         ~lets
+                         [~@lets]
                          ~@body)))
       `(fn ~arg-list ~@body))))
 

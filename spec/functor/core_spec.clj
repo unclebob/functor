@@ -6,22 +6,32 @@
   (context
     "expand-method-body"
     (it "expands an empty method"
-      (should= [[] #{}] (expand-method-form [])))
+      (should= [[] #{}] (expand-forms [])))
     (it "expands a constant"
       (should= [[1] #{}]
-               (expand-method-body [1])))
+               (expand-forms [1])))
     (it "expands a setter"
       (should= [['(clojure.core/reset! x 1)] #{'x}]
-               (expand-method-body ['(<- x 1)])))
+               (expand-forms ['(<- x 1)])))
     (it "expands a function"
       (should= [['(inc 1)] #{}]
-               (expand-method-body ['(inc 1)])))
+               (expand-forms ['(inc 1)])))
     (it "expands a function with a setter argument"
       (should= [['(do (clojure.core/reset! x 1))] #{'x}]
-               (expand-method-body ['(do (<- x 1))])))
+               (expand-forms ['(do (<- x 1))])))
     (it "expands a function with two setter arguments"
       (should= [['(do (clojure.core/reset! x 1) (clojure.core/reset! y 2))] #{'x 'y}]
-               (expand-method-body ['(do (<- x 1) (<- y 2))])))
+               (expand-forms ['(do (<- x 1) (<- y 2))])))
+    )
+  (context "dereference vars"
+    (it "does not dereference if there are no vars"
+      (should= ['x] (dereference-vars ['x] #{})))
+    (it "dereferences a simple var"
+      (should= ['@v] (dereference-vars ['v] #{'v})))
+    (it "dereferences vars deep in forms"
+      (should= ['(x @y) '@r] (dereference-vars ['(x y) 'r] #{'y 'r})))
+    (it "does not dereference the first argument of a setter."
+      (should= ['(clojure.core/reset! x y)] (dereference-vars ['(clojure.core/reset! x y)] #{'x})))
     )
   )
 
@@ -80,9 +90,9 @@
            (f 1)
            (g 2)
            (vector @x @v)))
-      (macroexpand-1 '(functor ([x] (f 1) (g 2) (vector @x @v))
+      (macroexpand-1 '(functor ([x] (f 1) (g 2) (vector x v))
                                (f [y] (<- x y))
-                               (g [y] (<- v (+ @x y)))))))
+                               (g [y] (<- v (+ x y)))))))
 
   (it "generates functor with a setter method and a buried call"
     (should=
@@ -103,15 +113,24 @@
            [y (atom nil)]
            (clojure.core/reset! y x)))
       (macroexpand-1 '(functor ([x] (<- y x))))))
+
+  (it "generates functor with dereferenced vars"
+    (should=
+      '(clojure.core/fn [x]
+               (clojure.core/let
+                 [y (atom nil)]
+                 (clojure.core/reset! y x)
+                 (clojure.core/deref y)))
+      (macroexpand-1 '(functor ([x] (<- y x) y)))))
   )
 
 
 (def degenerate (functor ([] 1)))
-(def one-method (functor ([] (g 2) @v) (g [x] (<- v x))))
+(def one-method (functor ([] (g 2) v) (g [x] (<- v x))))
 (def mean (functor
             ([ns]
              (make-sum)
-             (/ @sum (count ns)))
+             (/ sum (count ns)))
             (make-sum []
                       (<- sum (reduce + ns)))
             ))
@@ -119,12 +138,12 @@
 (def quad (functor
             ([a b c]
              (calc-discriminant)
-             (if (neg? @discriminant)
+             (if (neg? discriminant)
                :complex
                (do
                  (calc-x1)
                  (calc-x2)
-                 [@x1 @x2])))
+                 [x1 x2])))
             (calc-discriminant
               [] (<- discriminant (- (* b b) (* 4 a c))))
             (calc-x1 [] (<- x1 (/ (+ (- b) (Math/sqrt @discriminant)) (* 2 a))))
@@ -133,17 +152,15 @@
 
 (prn (macroexpand-1 '(functor
                        ([a b c]
-                        (calc-discriminant)
-                        (if (neg? @discriminant)
+                        (<- discriminant (- (* b b) (* 4 a c)))
+                        (if (neg? discriminant)
                           :complex
                           (do
                             (calc-x1)
                             (calc-x2)
-                            [@x1 @x2])))
-                       (calc-discriminant
-                         [] (<- discriminant (- (* b b) (* 4 a c))))
-                       (calc-x1 [] (<- x1 (/ (+ (- b) (Math/sqrt @discriminant)) (* 2 a))))
-                       (calc-x2 [] (<- x2 (/ (- (- b) (Math/sqrt @discriminant)) (* 2 a))))
+                            [x1 x2])))
+                       (calc-x1 [] (<- x1 (/ (+ (- b) (Math/sqrt discriminant)) (* 2 a))))
+                       (calc-x2 [] (<- x2 (/ (- (- b) (Math/sqrt discriminant)) (* 2 a))))
                        )))
 
 (defn quad-normal [a b c]
