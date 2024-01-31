@@ -10,6 +10,10 @@
       (empty? method-form)
       [[] #{}]
 
+      (vector? method-form)
+      (let [[items vars] (expand-method-body method-form)]
+        [(vec items) vars])
+
       (= '<- (first method-form))
       (let [var (second method-form)
             expression (nth method-form 2)
@@ -48,8 +52,9 @@
 
 (defn- generate-functor [method-data functor-desc methods-desc]
   (let [arg-list (first functor-desc)
-        body (rest functor-desc)]
-    (if (some? methods-desc)
+        [body vars] (expand-method-body (rest functor-desc))
+        method-data (update method-data :vars set/union vars)]
+    (if (or (some? methods-desc) (not (empty? (:vars method-data))))
       (let [lets (make-lets method-data)]
         `(fn ~arg-list (let
                          ~lets

@@ -19,6 +19,9 @@
     (it "expands a function with a setter argument"
       (should= [['(do (clojure.core/reset! x 1))] #{'x}]
                (expand-method-body ['(do (<- x 1))])))
+    (it "expands a function with two setter arguments"
+      (should= [['(do (clojure.core/reset! x 1) (clojure.core/reset! y 2))] #{'x 'y}]
+               (expand-method-body ['(do (<- x 1) (<- y 2))])))
     )
   )
 
@@ -92,6 +95,14 @@
            1))
       (macroexpand-1 '(functor ([x] (g 1) 1)
                                (g [y] (do (<- v y)))))))
+
+  (it "generates functor with a setter in the main body"
+    (should=
+      '(clojure.core/fn [x]
+         (clojure.core/let
+           [y (atom nil)]
+           (clojure.core/reset! y x)))
+      (macroexpand-1 '(functor ([x] (<- y x))))))
   )
 
 
@@ -120,6 +131,21 @@
             (calc-x2 [] (<- x2 (/ (- (- b) (Math/sqrt @discriminant)) (* 2 a))))
             ))
 
+(prn (macroexpand-1 '(functor
+                       ([a b c]
+                        (calc-discriminant)
+                        (if (neg? @discriminant)
+                          :complex
+                          (do
+                            (calc-x1)
+                            (calc-x2)
+                            [@x1 @x2])))
+                       (calc-discriminant
+                         [] (<- discriminant (- (* b b) (* 4 a c))))
+                       (calc-x1 [] (<- x1 (/ (+ (- b) (Math/sqrt @discriminant)) (* 2 a))))
+                       (calc-x2 [] (<- x2 (/ (- (- b) (Math/sqrt @discriminant)) (* 2 a))))
+                       )))
+
 (defn quad-normal [a b c]
   (let [discriminant (- (* b b) (* 4 a c))]
     (if (neg? discriminant)
@@ -140,4 +166,6 @@
 (describe "ancillary"
   (it "computes quadratic solutions"
     (should= :complex (quad-normal 1 2 3))
-    (should= [2.0 1.0] (quad-normal 1 -3 2))))
+    (should= [2.0 1.0] (quad-normal 1 -3 2))
+    )
+  )
