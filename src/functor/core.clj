@@ -34,10 +34,10 @@
 
 (defn- expand-method [method-desc method-data]
   (let [name (first method-desc)
-        args (vec (second method-desc))
+        args (second method-desc)
         body (drop 2 method-desc)
         [body vars] (expand-forms body)
-        fn-decl (if (empty? body) `(fn ~args) `(fn ~args ~@body))
+        fn-decl (if (empty? body) `(fn ~args) `(fn [~@args] ~@body))
         method-data (update method-data :methods concat [name fn-decl])
         method-data (update method-data :method-names conj name)
         method-data (update method-data :vars set/union vars)]
