@@ -1,29 +1,32 @@
 (ns functor.core
   (:require [clojure.set :as set]))
 
+(declare expand-method-body)
+
+(defn expand-method-form [method-form]
+  (if-not (coll? method-form)
+    [method-form #{}]
+    (cond
+      (empty? method-form)
+      [[] #{}]
+
+      (= '<- (first method-form))
+      (let [var (second method-form)
+            expression (nth method-form 2)
+            [expanded-body expanded-vars] (expand-method-form expression)]
+        [`(reset! ~var ~expanded-body) (conj expanded-vars var)])
+
+      :else
+      (let [f-name (first method-form)
+            args (rest method-form)
+            [forms vars] (expand-method-body args)]
+        [(concat [f-name] forms) vars]))))
+
 (defn expand-method-body [method-body]
-  (if (empty? method-body)
-    [nil #{}]
-    (loop [forms method-body
-           expanded-forms []
-           vars #{}]
-      (cond
-        (empty? forms)
-        [expanded-forms vars]
-
-        (not (seq? (first forms)))
-        (throw (Exception. (prn-str "not a <- setter:" (first forms))))
-
-        (= '<- (ffirst forms))
-        (let [form (first forms)
-              var (second form)
-              body (drop 2 form)]
-          (recur (rest forms)
-                 (concat expanded-forms [`(reset! ~var ~@body)])
-                 (conj vars var)))
-
-        :else
-        (throw (Exception. (prn-str "only <- setters allowed: " (first forms))))))))
+  (let [expansions (doall (map expand-method-form method-body))
+        expanded-forms (map first expansions)
+        vars (reduce #(set/union %1 (second %2)) #{} expansions)]
+    [(apply vector expanded-forms) vars]))
 
 (defn- expand-method [method-desc method-data]
   (let [name (first method-desc)

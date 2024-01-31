@@ -2,6 +2,26 @@
   (:require [functor.core :refer :all]
             [speclj.core :refer :all]))
 
+(describe "functor utilities"
+  (context
+    "expand-method-body"
+    (it "expands an empty method"
+      (should= [[] #{}] (expand-method-form [])))
+    (it "expands a constant"
+      (should= [[1] #{}]
+               (expand-method-body [1])))
+    (it "expands a setter"
+      (should= [['(clojure.core/reset! x 1)] #{'x}]
+               (expand-method-body ['(<- x 1)])))
+    (it "expands a function"
+      (should= [['(inc 1)] #{}]
+               (expand-method-body ['(inc 1)])))
+    (it "expands a function with a setter argument"
+      (should= [['(do (clojure.core/reset! x 1))] #{'x}]
+               (expand-method-body ['(do (<- x 1))])))
+    )
+  )
+
 (describe "functor-macro"
   (it "generates empty functor"
     (should=
@@ -51,15 +71,27 @@
            [x (atom nil)
             v (atom nil)
             f (clojure.core/fn [y]
-                  (clojure.core/reset! x y))
+                (clojure.core/reset! x y))
             g (clojure.core/fn [y]
-                   (clojure.core/reset! v (+ @x y)))]
-            (f 1)
-            (g 2)
+                (clojure.core/reset! v (+ @x y)))]
+           (f 1)
+           (g 2)
            (vector @x @v)))
       (macroexpand-1 '(functor ([x] (f 1) (g 2) (vector @x @v))
                                (f [y] (<- x y))
                                (g [y] (<- v (+ @x y)))))))
+
+  (it "generates functor with a setter method and a buried call"
+    (should=
+      '(clojure.core/fn [x]
+         (clojure.core/let
+           [v (atom nil)
+            g (clojure.core/fn [y]
+                (do (clojure.core/reset! v y)))]
+           (g 1)
+           1))
+      (macroexpand-1 '(functor ([x] (g 1) 1)
+                               (g [y] (do (<- v y)))))))
   )
 
 
@@ -75,19 +107,27 @@
 
 (def quad (functor
             ([a b c]
-             (discriminant)
-             (if (neg? @disc)
+             (calc-discriminant)
+             (if (neg? @discriminant)
                :complex
                (do
                  (calc-x1)
                  (calc-x2)
                  [@x1 @x2])))
-            (discriminant []
-                          (<- b2  (* b b))
-                          (<- disc  (- @b2 (* 4 a c))))
-            (calc-x1 [] (<- x1 (/ (+ (- b) (Math/sqrt @disc)) (* 2 a))))
-            (calc-x2 [] (<- x2 (/ (- (- b) (Math/sqrt @disc)) (* 2 a))))
+            (calc-discriminant
+              [] (<- discriminant (- (* b b) (* 4 a c))))
+            (calc-x1 [] (<- x1 (/ (+ (- b) (Math/sqrt @discriminant)) (* 2 a))))
+            (calc-x2 [] (<- x2 (/ (- (- b) (Math/sqrt @discriminant)) (* 2 a))))
             ))
+
+(defn quad-normal [a b c]
+  (let [discriminant (- (* b b) (* 4 a c))]
+    (if (neg? discriminant)
+      :complex
+      (let [sqrt-desc (Math/sqrt discriminant)
+            x1 (/ (+ (- b) sqrt-desc) (* 2 a))
+            x2 (/ (- (- b) sqrt-desc) (* 2 a))]
+        [x1 x2]))))
 
 (describe "functor execution"
   (it "executes functors"
@@ -95,5 +135,9 @@
     (should= 2 (one-method))
     (should= 2 (mean [1 2 3]))
     (should= :complex (quad 1 2 3))
-    (should= [2.0 1.0] (quad 1 -3 2))
-    ))
+    (should= [2.0 1.0] (quad 1 -3 2))))
+
+(describe "ancillary"
+  (it "computes quadratic solutions"
+    (should= :complex (quad-normal 1 2 3))
+    (should= [2.0 1.0] (quad-normal 1 -3 2))))
