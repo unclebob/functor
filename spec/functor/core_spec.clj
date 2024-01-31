@@ -127,6 +127,10 @@
 
 (def degenerate (functor ([] 1)))
 (def one-method (functor ([] (g 2) v) (g [x] (<- v x))))
+
+(prn 'one-method (macroexpand-1 '(functor ([] (g 2) v) (g [x] (<- v x)))))
+(prn 'two-func (macroexpand-1 '(functor ([]) (f [] (<- x 1) (inc 2)))))
+
 (def mean (functor
             ([ns]
              (make-sum)
@@ -146,8 +150,8 @@
                  [x1 x2])))
             (calc-discriminant
               [] (<- discriminant (- (* b b) (* 4 a c))))
-            (calc-x1 [] (<- x1 (/ (+ (- b) (Math/sqrt @discriminant)) (* 2 a))))
-            (calc-x2 [] (<- x2 (/ (- (- b) (Math/sqrt @discriminant)) (* 2 a))))
+            (calc-x1 [] (<- x1 (/ (+ (- b) (Math/sqrt discriminant)) (* 2 a))))
+            (calc-x2 [] (<- x2 (/ (- (- b) (Math/sqrt discriminant)) (* 2 a))))
             ))
 
 (prn (macroexpand-1 '(functor

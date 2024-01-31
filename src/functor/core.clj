@@ -37,8 +37,7 @@
         args (second method-desc)
         body (drop 2 method-desc)
         [body vars] (expand-forms body)
-        fn-decl (if (empty? body) `(fn ~args) `(fn [~@args] ~@body))
-        method-data (update method-data :methods concat [name fn-decl])
+        method-data (update method-data :methods conj [name args body])
         method-data (update method-data :method-names conj name)
         method-data (update method-data :vars set/union vars)]
     method-data))
@@ -63,7 +62,8 @@
       (= 'clojure.core/reset! (ffirst forms))
       (let [[_ name expression] (first forms)]
         (recur (rest forms)
-               (conj dereferenced-forms ['clojure.core/reset! name (first (dereference-vars [expression] vars))])))
+               (conj (vec dereferenced-forms)
+                     (list 'clojure.core/reset! name (first (dereference-vars [expression] vars))))))
 
       :else
       (recur (rest forms) (concat dereferenced-forms [(dereference-vars (first forms) vars)])))
@@ -73,9 +73,16 @@
 (defn make-atoms [vars]
   (reduce #(concat %1 [%2 '(atom nil)]) [] vars))
 
+(defn make-method-let [[name args body] vars]
+  (let [body (dereference-vars body vars)
+        fn-decl (if (empty? body) `(fn ~args) `(fn [~@args] ~@body))]
+    [name fn-decl]))
+
 (defn- make-lets [{:keys [methods vars]}]
-  (let [atoms (make-atoms vars)]
-    (vec (concat atoms methods))))
+  (let [atoms (make-atoms vars)
+        method-lets (map #(make-method-let % vars) methods)
+        method-lets (reduce concat method-lets)]
+    (vec (concat atoms method-lets))))
 
 (defn- generate-functor [method-data functor-desc methods-desc]
   (let [arg-list (first functor-desc)
