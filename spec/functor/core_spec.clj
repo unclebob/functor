@@ -117,10 +117,10 @@
   (it "generates functor with dereferenced vars"
     (should=
       '(clojure.core/fn [x]
-               (clojure.core/let
-                 [y (atom nil)]
-                 (clojure.core/reset! y x)
-                 (clojure.core/deref y)))
+         (clojure.core/let
+           [y (atom nil)]
+           (clojure.core/reset! y x)
+           (clojure.core/deref y)))
       (macroexpand-1 '(functor ([x] (<- y x) y)))))
   )
 
@@ -128,8 +128,7 @@
 (def degenerate (functor ([] 1)))
 (def one-method (functor ([] (g 2) v) (g [x] (<- v x))))
 
-(prn 'one-method (macroexpand-1 '(functor ([] (g 2) v) (g [x] (<- v x)))))
-(prn 'two-func (macroexpand-1 '(functor ([]) (f [] (<- x 1) (inc 2)))))
+(prn 'one-arg (macroexpand-1 '(functor ([x] x))))
 
 (def mean (functor
             ([ns]
@@ -139,54 +138,106 @@
                       (<- sum (reduce + ns)))
             ))
 
-(def quad (functor
-            ([a b c]
-             (calc-discriminant)
-             (if (neg? discriminant)
-               :complex
-               (do
-                 (calc-x1)
-                 (calc-x2)
-                 [x1 x2])))
-            (calc-discriminant
-              [] (<- discriminant (- (* b b) (* 4 a c))))
-            (calc-x1 [] (<- x1 (/ (+ (- b) (Math/sqrt discriminant)) (* 2 a))))
-            (calc-x2 [] (<- x2 (/ (- (- b) (Math/sqrt discriminant)) (* 2 a))))
-            ))
-
-(prn (macroexpand-1 '(functor
-                       ([a b c]
-                        (<- discriminant (- (* b b) (* 4 a c)))
-                        (if (neg? discriminant)
-                          :complex
-                          (do
-                            (calc-x1)
-                            (calc-x2)
-                            [x1 x2])))
-                       (calc-x1 [] (<- x1 (/ (+ (- b) (Math/sqrt discriminant)) (* 2 a))))
-                       (calc-x2 [] (<- x2 (/ (- (- b) (Math/sqrt discriminant)) (* 2 a))))
-                       )))
+(prn 'mean (macroexpand-1 '(functor
+                             ([ns]
+                              (make-sum)
+                              (/ sum (count ns)))
+                             (make-sum []
+                                       (<- sum (reduce + ns)))
+                             )))
 
 (defn quad-normal [a b c]
   (let [discriminant (- (* b b) (* 4 a c))]
-    (if (neg? discriminant)
-      :complex
+    (cond
+      (zero? a)
+      (/ (- c) b)
+
+      (zero? discriminant)
+      (/ (- b) (* 2 a))
+
+      (neg? discriminant)
+      (let [i-sqrt-discriminant (Math/sqrt (- discriminant))
+            c-x1 [(- b) i-sqrt-discriminant]
+            c-x1 (map #(/ % (* 2 a)) c-x1)
+            c-x2 [(- b) (- i-sqrt-discriminant)]
+            c-x2 (map #(/ % (* 2 a)) c-x2)]
+        [c-x1 c-x2])
+      :else
       (let [sqrt-desc (Math/sqrt discriminant)
             x1 (/ (+ (- b) sqrt-desc) (* 2 a))
             x2 (/ (- (- b) sqrt-desc) (* 2 a))]
         [x1 x2]))))
+
+(prn 'quad (macroexpand-1 '(functor
+                             ([a b c]
+                              (let [discriminant (- (* b b) (* 4 a c))]
+                                (cond
+                                  (zero? a)
+                                  (/ (- c) b)
+
+                                  (zero? discriminant)
+                                  (/ (- b) (* 2 a))
+
+                                  (neg? discriminant)
+                                  (let [i-sqrt-discriminant (Math/sqrt (- discriminant))
+                                        c-x1 [(- b) i-sqrt-discriminant]
+                                        c-x1 (map (fn [x] (/ x (* 2 a))) c-x1)
+                                        c-x2 [(- b) (- i-sqrt-discriminant)]
+                                        c-x2 (map (fn [x] (/ x (* 2 a))) c-x2)]
+                                    [c-x1 c-x2])
+                                  :else
+                                  (let [sqrt-desc (Math/sqrt discriminant)
+                                        x1 (/ (+ (- b) sqrt-desc) (* 2 a))
+                                        x2 (/ (- (- b) sqrt-desc) (* 2 a))]
+                                    [x1 x2]))) ([a b c]
+                                                )))))
+
+(def quad
+  (functor
+    ([a b c]
+     (<- discriminant (make-discriminant))
+     (cond
+       (zero? a) (linear)
+       (zero? discriminant) (one-root)
+       (neg? discriminant) (complex-roots)
+       :else (real-roots)))
+
+    (linear [] (/ (- c) b))
+    (one-root [] (/ (- b) (* 2 a)))
+
+    (over-2a [c] (map (fn [x] (/ x (* 2 a))) c))
+
+    (complex-roots
+      []
+      (let [i-sqrt-discriminant (Math/sqrt (- discriminant))
+            c-x1 (over-2a [(- b) i-sqrt-discriminant])
+            c-x2 (over-2a [(- b) (- i-sqrt-discriminant)])]
+        [c-x1 c-x2]))
+
+    (real-roots
+      []
+      (let [sqrt-desc (Math/sqrt discriminant)
+            x1 (/ (+ (- b) sqrt-desc) (* 2 a))
+            x2 (/ (- (- b) sqrt-desc) (* 2 a))]
+        [x1 x2]))
+
+    (make-discriminant [] (- (* b b) (* 4 a c)))))
 
 (describe "functor execution"
   (it "executes functors"
     (should= 1 (degenerate))
     (should= 2 (one-method))
     (should= 2 (mean [1 2 3]))
-    (should= :complex (quad 1 2 3))
-    (should= [2.0 1.0] (quad 1 -3 2))))
+    (should= ['(-1 1.4142135623730951) '(-1 -1.4142135623730951)] (quad 1 2 3))
+    (should= [2.0 1.0] (quad 1 -3 2))
+    (should= -1 (quad 0 1 1))
+    (should= 2 (quad 1 -4 4))))
 
 (describe "ancillary"
   (it "computes quadratic solutions"
-    (should= :complex (quad-normal 1 2 3))
+    (should= ['(-1 1.4142135623730951) '(-1 -1.4142135623730951)] (quad-normal 1 2 3))
     (should= [2.0 1.0] (quad-normal 1 -3 2))
+    (should= -1 (quad-normal 0 1 1))
+    (should= 2 (quad-normal 1 -4 4))
     )
   )
