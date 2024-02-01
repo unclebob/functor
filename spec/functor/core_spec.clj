@@ -23,15 +23,16 @@
       (should= [['(do (clojure.core/reset! x 1) (clojure.core/reset! y 2))] #{'x 'y}]
                (expand-forms ['(do (<- x 1) (<- y 2))])))
     )
+
   (context "dereference vars"
     (it "does not dereference if there are no vars"
-      (should= ['x] (dereference-vars ['x] #{})))
+      (should= ['x] (dereference-vars #{} ['x])))
     (it "dereferences a simple var"
-      (should= ['@v] (dereference-vars ['v] #{'v})))
+      (should= ['@v] (dereference-vars #{'v} ['v])))
     (it "dereferences vars deep in forms"
-      (should= ['(x @y) '@r] (dereference-vars ['(x y) 'r] #{'y 'r})))
+      (should= ['(x @y) '@r] (dereference-vars #{'y 'r} ['(x y) 'r])))
     (it "does not dereference the first argument of a setter."
-      (should= ['(clojure.core/reset! x y)] (dereference-vars ['(clojure.core/reset! x y)] #{'x})))
+      (should= ['(clojure.core/reset! x y)] (dereference-vars #{'x} ['(clojure.core/reset! x y)])))
     )
   )
 
