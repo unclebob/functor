@@ -13,7 +13,7 @@ the local variables and arguments used by the parent function.
 
 If this sounds to OO, don't worry.  I'm not proposing we add classes or mutated variables to the language.  Rather I'm proposing a mechanism for initializing outer-scope variables within subfunction.  The difference is significant.  This could be implemented by the state monad. 
 
-##Example
+## Example
 
 Here's a simple function for calculating the roots of a quadratic equation.  
 
