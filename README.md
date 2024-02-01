@@ -56,7 +56,7 @@ Here is how it looks with the functor macro.
 	    (linear [] (/ (- c) b))
 	    (one-root [] (/ (- b) (* 2 a)))
 	
-		(over-2a [c] (map (fn [x] (/ x (* 2 a))) c))
+	    (over-2a [c] (map (fn [x] (/ x (* 2 a))) c))
 	
 	    (complex-roots
 	      []
