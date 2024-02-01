@@ -43,35 +43,35 @@ This doesn't look to bad.  It's a nicely subdivided into the relevant parts.  St
 
 Here is how it looks with the functor macro.  
 
-(def quad
-  (functor
-    ([a b c]
-     (<- discriminant (make-discriminant))
-     (cond
-       (zero? a) (linear)
-       (zero? discriminant) (one-root)
-       (neg? discriminant) (complex-roots)
-       :else (real-roots)))
+	(def quad
+	  (functor
+	    ([a b c]
+	     (<- discriminant (make-discriminant))
+	     (cond
+	       (zero? a) (linear)
+	       (zero? discriminant) (one-root)
+	       (neg? discriminant) (complex-roots)
+	       :else (real-roots)))
 
-    (linear [] (/ (- c) b))
-    (one-root [] (/ (- b) (* 2 a)))
+	    (linear [] (/ (- c) b))
+	    (one-root [] (/ (- b) (* 2 a)))
 	
-	(over-2a [c] (map (fn [x] (/ x (* 2 a))) c))
+		(over-2a [c] (map (fn [x] (/ x (* 2 a))) c))
 	
-    (complex-roots
-      []
-      (let [i-sqrt-discriminant (Math/sqrt (- discriminant))
-            c-x1 (over-2a [(- b) i-sqrt-discriminant])
-            c-x2 (over-2a [(- b) (- i-sqrt-discriminant)])]
-        [c-x1 c-x2]))
+	    (complex-roots
+	      []
+	      (let [i-sqrt-discriminant (Math/sqrt (- discriminant))
+	            c-x1 (over-2a [(- b) i-sqrt-discriminant])
+	            c-x2 (over-2a [(- b) (- i-sqrt-discriminant)])]
+	        [c-x1 c-x2]))
 
-    (real-roots
-      []
-      (let [sqrt-desc (Math/sqrt discriminant)
-            x1 (/ (+ (- b) sqrt-desc) (* 2 a))
-            x2 (/ (- (- b) sqrt-desc) (* 2 a))]
-        [x1 x2]))
+	    (real-roots
+	      []
+	      (let [sqrt-desc (Math/sqrt discriminant)
+	            x1 (/ (+ (- b) sqrt-desc) (* 2 a))
+	            x2 (/ (- (- b) sqrt-desc) (* 2 a))]
+	        [x1 x2]))
 
-    (make-discriminant [] (- (* b b) (* 4 a c)))))
+	    (make-discriminant [] (- (* b b) (* 4 a c)))))
 	
 Notice that now we have a set of sub-functions that are scoped within the outer `quad` function.  Notice also that those sub-functions have access to the arguments of `quad` _and_ to the `discriminant` variable.  Note the strange `<-` symbol that _sets_ the `discriminant`.  Variables that are initialized in that manner are usable _throughout the scope_ of the outer function.  
