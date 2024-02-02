@@ -131,13 +131,14 @@
 
 (prn 'one-arg (macroexpand-1 '(functor ([x] x))))
 
-(def mean (functor
-            ([ns]
-             (make-sum)
-             (/ sum (count ns)))
-            (make-sum []
-                      (<- sum (reduce + ns)))
-            ))
+(def mean
+  (functor
+    ([ns]
+     (make-sum)
+     (/ sum (count ns)))
+    (make-sum
+      []
+      (<- sum (reduce + ns)))))
 
 (prn 'mean (macroexpand-1 '(functor
                              ([ns]
