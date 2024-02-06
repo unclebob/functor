@@ -1,4 +1,5 @@
 # functor
+This is a proposal for a new language feature within Clojure (See the end of this document).  I've been experimenting with this proposed feature by creating the `functor` macro that simulates what I'd like the language to do for me.  
 
 ## Installation
     project.clj [com.cleancoder/functor "0.0.1-SNAPSHOT"]
