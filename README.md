@@ -228,9 +228,92 @@ Look at that top level function!   If direct, encrypt otherwise leave unencrypte
 This would be tougher to do with `letfn` because you'd have to pass that `p-tag` around.  Allowing `p-tag` to
 be set by one sub-function but used by another is -- convenient.
 
+## Yet Another Example
+This one's got a lot of nested `let`s.  So lets see what the functor can do to untangle it.
+
+	(defn handle-duplicate-event [event id relays-already-sent-this-id url]
+	  (do
+	    (update-mem [:event-counter :dups] inc-if-nil)
+	    (when (is-text-event? event)
+	      (when-not (contains? relays-already-sent-this-id url)
+	        (update-mem [:processed-event-ids id] add-relay-to-processed-event-ids url)
+	        (gateway/add-relays-to-event (get-db) id [url])))))
+
+	(defn validate-and-process-event [url envelope]
+	  (let [[_name _subscription-id inner-event :as _decoded-msg] envelope
+	        event (translate-event inner-event)
+	        id (:id event)
+	        relays-already-sent-this-id (get-mem [:processed-event-ids id])]
+	    (update-mem [:event-counter :kinds (:kind event)] inc-if-nil)
+	    (if (some? relays-already-sent-this-id)
+	      (handle-duplicate-event event id relays-already-sent-this-id url)
+	      (let [computed-id (compute-id inner-event)
+	            ui-handler (get-mem :event-handler)]
+	        (update-mem :processed-event-ids assoc id #{url})
+	        (if (= id computed-id)
+	          (let [event (decrypt-dm-event event)]
+	            (when (not (:private event))
+	              (process-event event url)
+	              (when (is-text-event? event)
+	                (handle-text-event ui-handler event))))
+	          (log-pr 2 'id-mismatch url 'computed-id (util/num32->hex-string computed-id) envelope))))))
+			  
+Using the functor macro I was able to cut out most of the nested `let`s, rearrange the code to make it "saner", and combine the two related functions into a single main function with several sub-functions.  The result is, in my humble opinion, much better.
+
+	(def validate-and-process-event
+	  (functor
+	    ([url envelope]
+	     (init)
+	     (if (is-duplicate-id?)
+	       (handle-duplicate-event)
+	       (handle-new-event)))
+
+	    (handle-duplicate-event
+	      []
+	      (update-mem [:event-counter :dups] inc-if-nil)
+	      (when (is-text-event? event)
+	        (when-not (contains? relays-already-sent-this-id url)
+	          (update-mem [:processed-event-ids id] add-relay-to-processed-event-ids url)
+	          (gateway/add-relays-to-event (get-db) id [url]))))
+
+	    (is-duplicate-id? [] (some? relays-already-sent-this-id))
+
+	    (is-valid-id?
+	      []
+	      (<- computed-id (compute-id inner-event))
+	      (= id computed-id))
+
+	    (handle-valid-event
+	      []
+	      (let [decrypted-event (decrypt-dm-event event)]
+	        (when (not (:private decrypted-event))
+	          (process-event decrypted-event url)
+	          (when (is-text-event? decrypted-event)
+	            (handle-text-event ui-handler decrypted-event)))))
+
+	    (handle-new-event
+	      []
+	      (update-mem :processed-event-ids assoc id (set [url]))
+	      (if (is-valid-id?)
+	        (handle-valid-event)
+	        (log-pr 2 'id-mismatch url 'computed-id (util/num32->hex-string computed-id) envelope)))
+
+	    (init []
+	          (<- ui-handler (get-mem :event-handler))
+	          (<- inner-event (nth envelope 2))
+	          (<- event (translate-event inner-event))
+	          (<- id (:id event))
+	          (<- relays-already-sent-this-id (get-mem [:processed-event-ids id]))
+	          (update-mem [:event-counter :kinds (:kind event)] inc-if-nil)
+	          )
+	    )
+	  )
+
 ## Issues
 My IDE (IntelliJ) hates this.  It sees all the symbols within the functor as undefined, and colors them all orange.  Yuk!
 It also won't rename them or let me refactor them nicely.  Damn.
+
+Also, the macro does not like `#()` and `#{}` reader shortcuts.  You have to replace them with `fn` and `set`.  I don't know why.
 
 ## Proposal
 I think this would make a nice addition to the language.  It would make it much easier to pull complex functions
@@ -239,3 +322,14 @@ function.
 
 The language feature would not need to use `atom`s because the compiler could use vars that are scoped 
 to the outer function. 
+
+I'd like it to be part of `fn` (and therefore `defn` and `letfn`) and look something like this:
+
+      (defn mean
+		([ns]
+		 (make-sum)
+		 (/ sum (count ns)))
+		(make-sum []
+		  (<- sum (reduce + ns))))
+
+
