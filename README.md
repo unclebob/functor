@@ -338,4 +338,10 @@ I expect that some will react against this by saying (or thinking)
 
 But after some thought I think those folks will agree that this is _not_ what's going on here.  We are not creating some long lived mutable object.  Rather, we are creating vars scoped at the level of a function with sub-functions that have access to those vars.  From a functional point of view this is no different from having a set of `let` vars followed by a set of expressions that use those vars. 
 
-One might argue that the `<-` operator allows vars to be mutated.  Again, that is not necessarily the case.  In most cases the vars are simply initialized once and never mutated.  The compiler could ensure that no uninitialized var was used.  The compiler could prevent mutation by simply preventing more than one execution of `<-` on a var.  Better than that, however, would be to simulate the behavior of `let` redefinitions of a var, which are _not_ mutations.  
+One might argue that the `<-` operator allows vars to be mutated.  Again, that is not necessarily the case.  In most cases the vars are simply initialized once and never mutated.  The compiler could ensure that no uninitialized var was used.  The compiler could prevent mutation by simply preventing more than one execution of `<-` on a var.  Better than that, however, would be to simulate the behavior of `let` redefinitions of a var, which are _not_ mutations. 
+	 
+	 (let [x 1
+		   x 2]
+	 ...)
+
+In the above, `x` is not mutated.  Instead a new `x` var is created and the older one is hidden.  Any function holding on to the older one still has access to it.  The vars set by `<-` could have the same behavior.
