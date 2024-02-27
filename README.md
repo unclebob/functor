@@ -2,8 +2,11 @@
 This is a proposal for a new language feature within Clojure (See the end of this document).  I've been experimenting with this proposed feature by creating the `functor` macro that simulates what I'd like the language to do for me.  
 
 ## Installation
-    project.clj [com.cleancoder/functor "0.0.1-SNAPSHOT"]
-    require [functor.core :refer [functor]]
+
+```clojure
+project.clj [com.cleancoder/functor "0.0.1-SNAPSHOT"]
+require [functor.core :refer [functor]]
+```
 
 ## Introduction
 The functor macro is an experiment in improving the cleanliness and refactorability of Clojure programs. 
@@ -24,62 +27,66 @@ If this sounds to OO, don't worry.  I'm not proposing we add classes or mutated 
 
 The following is a simple function for calculating the roots of a quadratic equation.  
 
-	(defn quad- [a b c]
-	  (let [discriminant (- (* b b) (* 4 a c))]
-	    (cond
-	      (zero? a)
-	      (/ (- c) b)
+```clojure
+(defn quad- [a b c]
+  (let [discriminant (- (* b b) (* 4 a c))]
+    (cond
+      (zero? a)
+      (/ (- c) b)
 
-	      (zero? discriminant)
-	      (/ (- b) (* 2 a))
+      (zero? discriminant)
+      (/ (- b) (* 2 a))
 
-	      (neg? discriminant)
-	      (let [i-sqrt-discriminant (Math/sqrt (- discriminant))
-	            c-x1 [(- b) i-sqrt-discriminant]
-	            c-x1 (map #(/ % (* 2 a)) c-x1)
-	            c-x2 [(- b) (- i-sqrt-discriminant)]
-	            c-x2 (map #(/ % (* 2 a)) c-x2)]
-	        [c-x1 c-x2])
-	      :else
-	      (let [sqrt-desc (Math/sqrt discriminant)
-	            x1 (/ (+ (- b) sqrt-desc) (* 2 a))
-	            x2 (/ (- (- b) sqrt-desc) (* 2 a))]
-	        [x1 x2]))))
+      (neg? discriminant)
+      (let [i-sqrt-discriminant (Math/sqrt (- discriminant))
+            c-x1 [(- b) i-sqrt-discriminant]
+            c-x1 (map #(/ % (* 2 a)) c-x1)
+            c-x2 [(- b) (- i-sqrt-discriminant)]
+            c-x2 (map #(/ % (* 2 a)) c-x2)]
+        [c-x1 c-x2])
+      :else
+      (let [sqrt-desc (Math/sqrt discriminant)
+            x1 (/ (+ (- b) sqrt-desc) (* 2 a))
+            x2 (/ (- (- b) sqrt-desc) (* 2 a))]
+        [x1 x2]))))
+```
 			
 This doesn't look to bad.  It's a nicely subdivided into the relevant parts.  Still, it's a bit large, and lacks explanation.  
 
 Here is how it looks with the functor macro.  
 
-	(def quad
-	  (functor
-	    ([a b c]
-	     (<- discriminant (make-discriminant))
-	     (cond
-	       (zero? a) (linear)
-	       (zero? discriminant) (one-root)
-	       (neg? discriminant) (complex-roots)
-	       :else (real-roots)))
+```clojure
+(def quad
+  (functor
+    ([a b c]
+     (<- discriminant (make-discriminant))
+     (cond
+       (zero? a) (linear)
+       (zero? discriminant) (one-root)
+       (neg? discriminant) (complex-roots)
+       :else (real-roots)))
 
-	    (linear [] (/ (- c) b))
-	    (one-root [] (/ (- b) (* 2 a)))
-	
-	    (over-2a [c] (map (fn [x] (/ x (* 2 a))) c))
-	
-	    (complex-roots
-	      []
-	      (let [i-sqrt-discriminant (Math/sqrt (- discriminant))
-	            c-x1 (over-2a [(- b) i-sqrt-discriminant])
-	            c-x2 (over-2a [(- b) (- i-sqrt-discriminant)])]
-	        [c-x1 c-x2]))
+    (linear [] (/ (- c) b))
+    (one-root [] (/ (- b) (* 2 a)))
 
-	    (real-roots
-	      []
-	      (let [sqrt-desc (Math/sqrt discriminant)
-	            x1 (/ (+ (- b) sqrt-desc) (* 2 a))
-	            x2 (/ (- (- b) sqrt-desc) (* 2 a))]
-	        [x1 x2]))
+    (over-2a [c] (map (fn [x] (/ x (* 2 a))) c))
 
-	    (make-discriminant [] (- (* b b) (* 4 a c)))))
+    (complex-roots
+      []
+      (let [i-sqrt-discriminant (Math/sqrt (- discriminant))
+            c-x1 (over-2a [(- b) i-sqrt-discriminant])
+            c-x2 (over-2a [(- b) (- i-sqrt-discriminant)])]
+        [c-x1 c-x2]))
+
+    (real-roots
+      []
+      (let [sqrt-desc (Math/sqrt discriminant)
+            x1 (/ (+ (- b) sqrt-desc) (* 2 a))
+            x2 (/ (- (- b) sqrt-desc) (* 2 a))]
+        [x1 x2]))
+
+    (make-discriminant [] (- (* b b) (* 4 a c)))))
+```
 	
 Notice that now we have a set of sub-functions that are scoped within the outer `quad` function.  
 Notice also that those sub-functions have access to the arguments of `quad` _and_ to the `discriminant` 
@@ -96,24 +103,28 @@ function.  But before we get into better motivations, let's look at how the `fun
 ## Behind the Scenes
 Consider this simple example:
 
-    (def mean
-      (functor
-        ([ns]
-         (make-sum)
-         (/ sum (count ns)))
-        (make-sum
-          []
-          (<- sum (reduce + ns)))))
+```clojure
+(def mean
+  (functor
+    ([ns]
+     (make-sum)
+     (/ sum (count ns)))
+    (make-sum
+      []
+      (<- sum (reduce + ns)))))
+```
 
 Again, this is not a particularly motivating example; but it is small enough to illustrate _how_ the `functor`
 macro works.  Here is the (slightly trimmed) code that it generates.
 
-    (def mean 
-      (fn [ns] 
-        (let [sum (atom nil) 
-              make-sum (fn [] (reset! sum (reduce + ns)))] 
-          (make-sum) 
-          (/ @sum (count ns)))))
+```clojure
+(def mean 
+  (fn [ns] 
+    (let [sum (atom nil) 
+          make-sum (fn [] (reset! sum (reduce + ns)))] 
+      (make-sum) 
+      (/ @sum (count ns)))))
+```
 
 Ew, Yuk!  An `atom`!  Allow me to explain.
 The `sum` atom is scoped within the `mean` function.  All the sub-functions have access to `sum`, 
@@ -131,42 +142,46 @@ Also, I build this macro as a means for me to experiment with what I hope may be
 ## A Better Example
 So, on to a more motivating example.  Here's a small function from `github.com/unclebob/more-speech`.
 
-    (defn add-cross-reference [db event]
-      (let [[_ _ referent] (events/get-references event)
-            id (:id event)]
-        (when (some? referent)
-          (if (gateway/event-exists? db referent)
-            (gateway/add-reference-to-event db referent id)
-            (update-mem [:orphaned-replies referent] conj id)))
-        (let [orphaned-replies (get-mem [:orphaned-replies id])]
-          (doseq [orphan orphaned-replies]
-            (gateway/add-reference-to-event db id orphan))
-          (update-mem :orphaned-replies dissoc id))))
+```clojure
+(defn add-cross-reference [db event]
+  (let [[_ _ referent] (events/get-references event)
+        id (:id event)]
+    (when (some? referent)
+      (if (gateway/event-exists? db referent)
+        (gateway/add-reference-to-event db referent id)
+        (update-mem [:orphaned-replies referent] conj id)))
+    (let [orphaned-replies (get-mem [:orphaned-replies id])]
+      (doseq [orphan orphaned-replies]
+        (gateway/add-reference-to-event db id orphan))
+      (update-mem :orphaned-replies dissoc id))))
+```
 
 This really isn't too bad; but can we make this better with a functor?
 
-    (def add-cross-reference
-      (functor
-        ([db event]
-         (<- id (:id event))
-         (<- parent (nth (events/get-references event) 2))
-         
-         (when (some? parent)
-           (adopt-or-orphan-this-event))
-         (un-orphan-events-that-reference-this-event))
+```clojure
+(def add-cross-reference
+  (functor
+    ([db event]
+     (<- id (:id event))
+     (<- parent (nth (events/get-references event) 2))
+     
+     (when (some? parent)
+       (adopt-or-orphan-this-event))
+     (un-orphan-events-that-reference-this-event))
+
+    (adopt-or-orphan-this-event
+      []
+      (if (gateway/event-exists? db parent)
+        (gateway/add-reference-to-event db parent id)
+        (update-mem [:orphaned-replies parent] conj id)))
     
-        (adopt-or-orphan-this-event
-          []
-          (if (gateway/event-exists? db parent)
-            (gateway/add-reference-to-event db parent id)
-            (update-mem [:orphaned-replies parent] conj id)))
-        
-        (un-orphan-events-that-reference-this-event
-          []
-          (let [orphaned-replies (get-mem [:orphaned-replies id])]
-            (doseq [orphan orphaned-replies]
-              (gateway/add-reference-to-event db id orphan))
-            (update-mem :orphaned-replies dissoc id)))))
+    (un-orphan-events-that-reference-this-event
+      []
+      (let [orphaned-replies (get-mem [:orphaned-replies id])]
+        (doseq [orphan orphaned-replies]
+          (gateway/add-reference-to-event db id orphan))
+        (update-mem :orphaned-replies dissoc id)))))
+```
 
 This is a bit better.  I could have done it with `letfn` but this seems a bit prettier to me.
 But is there a better example?
@@ -175,54 +190,58 @@ But is there a better example?
 
 Again, from more-speech, there's this:
 
-    (defn encrypt-if-direct-message [content tags]
-      (if (re-find #"^D \#\[\d+\]" content)
-        (let [reference-digits (re-find #"\d+" content)
-              reference-index (Integer/parseInt reference-digits)
-              p-tag (get tags reference-index)]
-          (if (nil? p-tag)
-            [content 1]
-            (let [recipient-key (hex-string->num (second p-tag))
-                  private-key (get-mem [:keys :private-key])
-                  sender-key (hex-string->num private-key)
-                  shared-secret (SECP256K1/calculateKeyAgreement sender-key recipient-key)
-                  encrypted-content (SECP256K1/encrypt shared-secret content)]
-              [encrypted-content 4])))
-        [content 1]))
+```clojure
+(defn encrypt-if-direct-message [content tags]
+  (if (re-find #"^D \#\[\d+\]" content)
+    (let [reference-digits (re-find #"\d+" content)
+          reference-index (Integer/parseInt reference-digits)
+          p-tag (get tags reference-index)]
+      (if (nil? p-tag)
+        [content 1]
+        (let [recipient-key (hex-string->num (second p-tag))
+              private-key (get-mem [:keys :private-key])
+              sender-key (hex-string->num private-key)
+              shared-secret (SECP256K1/calculateKeyAgreement sender-key recipient-key)
+              encrypted-content (SECP256K1/encrypt shared-secret content)]
+          [encrypted-content 4])))
+    [content 1]))
+```
 
 Nested `if`s with nested `let`s.  Urghh.  Let's see how a functor might help.
 
-    (def encrypt-if-direct-message
-      (functor
-        ([content tags]
-         (if (is-direct?)
-           (encrypt-if-properly-referenced)
-           (leave-unencrypted)))
-    
-        (is-direct? [] (re-find #"^D \#\[\d+\]" content))
-    
-        (get-p-tag-from-content
-          []
-          (let [reference-digits (re-find #"\d+" content)
-                reference-index (Integer/parseInt reference-digits)]
-            (get tags reference-index)))
-    
-        (encrypt-content
-          []
-          (let [recipient-key (hex-string->num (second p-tag))
-                private-key (get-mem [:keys :private-key])
-                sender-key (hex-string->num private-key)
-                shared-secret (SECP256K1/calculateKeyAgreement sender-key recipient-key)]
-            (SECP256K1/encrypt shared-secret content)))
-    
-        (encrypt-if-properly-referenced
-          []
-          (<- p-tag (get-p-tag-from-content))
-          (if (nil? p-tag)
-            [content 1]
-            [(encrypt-content) 4]))
-    
-        (leave-unencrypted [] [content 1])))
+```clojure
+(def encrypt-if-direct-message
+  (functor
+    ([content tags]
+     (if (is-direct?)
+       (encrypt-if-properly-referenced)
+       (leave-unencrypted)))
+
+    (is-direct? [] (re-find #"^D \#\[\d+\]" content))
+
+    (get-p-tag-from-content
+      []
+      (let [reference-digits (re-find #"\d+" content)
+            reference-index (Integer/parseInt reference-digits)]
+        (get tags reference-index)))
+
+    (encrypt-content
+      []
+      (let [recipient-key (hex-string->num (second p-tag))
+            private-key (get-mem [:keys :private-key])
+            sender-key (hex-string->num private-key)
+            shared-secret (SECP256K1/calculateKeyAgreement sender-key recipient-key)]
+        (SECP256K1/encrypt shared-secret content)))
+
+    (encrypt-if-properly-referenced
+      []
+      (<- p-tag (get-p-tag-from-content))
+      (if (nil? p-tag)
+        [content 1]
+        [(encrypt-content) 4]))
+
+    (leave-unencrypted [] [content 1])))
+```
 
 Look at that top level function!   If direct, encrypt otherwise leave unencrypted.  Nice.
 
